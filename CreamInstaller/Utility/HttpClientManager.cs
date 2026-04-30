@@ -19,6 +19,7 @@ internal static class HttpClientManager
 
     internal static void Setup()
     {
+        HttpClient?.Dispose();
         HttpClient = new();
         if (CreamInstaller.Platforms.Epic.EpicStore.EpicBool)
         {

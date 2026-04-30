@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using CreamInstaller.Forms;
 using CreamInstaller.Platforms.Steam;
@@ -91,7 +92,7 @@ internal static class Program
 
     internal static bool Canceled;
 
-    internal static async void Cleanup(bool cancel = true)
+    internal static async Task Cleanup(bool cancel = true)
     {
         Canceled = cancel;
         await SteamCMD.Cleanup();

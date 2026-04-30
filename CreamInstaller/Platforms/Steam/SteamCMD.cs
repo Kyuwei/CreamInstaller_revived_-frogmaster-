@@ -46,10 +46,11 @@ internal static partial class SteamCMD
     private static async Task<string> Run(string appId)
         => await Task.Run(() =>
         {
-            wait_for_lock:
-            if (Program.Canceled)
-                return "";
-            for (int i = 0; i < Locks.Length; i++)
+            while (true)
+            {
+                if (Program.Canceled)
+                    return "";
+                for (int i = 0; i < Locks.Length; i++)
             {
                 if (Program.Canceled)
                     return "";
@@ -57,8 +58,7 @@ internal static partial class SteamCMD
                     continue;
                 if (appId != null)
                 {
-                    _ = AttemptCount.TryGetValue(appId, out int count);
-                    AttemptCount[appId] = ++count;
+                    AttemptCount.AddOrUpdate(appId, 1, (_, count) => count + 1);
                 }
 
                 if (Program.Canceled)
@@ -105,7 +105,7 @@ internal static partial class SteamCMD
                     if (appId != null &&
                         output.ToString().Contains($"No app info for AppID {appId} found, requesting..."))
                     {
-                        AttemptCount[appId]++;
+                        AttemptCount.AddOrUpdate(appId, 1, (_, count) => count + 1);
                         processStartInfo.Arguments = GetArguments(appId);
                         process = Process.Start(processStartInfo);
                         appInfoStarted = false;
@@ -121,7 +121,7 @@ internal static partial class SteamCMD
             }
 
             Thread.Sleep(200);
-            goto wait_for_lock;
+            }
         });
 
     internal static async Task<bool> Setup(IProgress<int> progress)
@@ -338,7 +338,6 @@ internal static partial class SteamCMD
                 // ignored
             }
         })).ToList();
-        foreach (Task task in tasks)
-            await task;
+        await Task.WhenAll(tasks);
     }
 }

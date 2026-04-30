@@ -60,9 +60,9 @@ internal static class ThemeManager
 
     internal static Color CustomTreeViewProxyColor => IsDark ? DarkProxy : LightProxy;
 
-    internal static Color CustomTreeViewHighlightPlatformColor => DarkPlatform; // C1 (uses same color for highlight)
+    internal static Color CustomTreeViewHighlightPlatformColor => IsDark ? DarkPlatform : LightPlatform; // C1 (uses same color for highlight)
     internal static Color CustomTreeViewDisabledPlatformColor => ColorTranslator.FromHtml("#AAAA69"); // C3
-    internal static Color CustomTreeViewHighlightIdColor => DarkId; // C4
+    internal static Color CustomTreeViewHighlightIdColor => IsDark ? DarkId : LightId; // C4
     internal static Color CustomTreeViewDisabledIdColor => ColorTranslator.FromHtml("#69AAAA"); // C6
     internal static Color CustomTreeViewDisabledProxyColor => ColorTranslator.FromHtml("#69AA69"); // C8
 
@@ -83,7 +83,7 @@ internal static class ThemeManager
     /// <summary>
     /// Toggle dark mode and re-apply theming to all open forms.
     /// </summary>
-    internal static void ToggleDarkMode(Form anyForm)
+    internal static void ToggleDarkMode()
     {
         Program.DarkModeEnabled = !Program.DarkModeEnabled;
         ApplyToAllOpenForms();
