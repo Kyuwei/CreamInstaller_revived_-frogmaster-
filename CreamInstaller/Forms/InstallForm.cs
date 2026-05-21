@@ -58,7 +58,7 @@ internal sealed partial class InstallForm : CustomForm
         try
         {
             if (info)
-                _ = Invoke(() =>
+                Invoke(() =>
                 {
                     if (!userInfoLabel.IsDisposed)
                         userInfoLabel.Text = text;
