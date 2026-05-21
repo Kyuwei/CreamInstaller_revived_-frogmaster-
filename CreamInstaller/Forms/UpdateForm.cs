@@ -45,6 +45,25 @@ internal sealed partial class UpdateForm : CustomForm
 
     private async void OnLoad()
     {
+        try
+        {
+            await OnLoadCore();
+        }
+        catch (Exception e)
+        {
+            // Without this catch the exception would escape an async void and
+            // crash the app during startup when GitHub or the network is flaky.
+            if (!IsDisposed && e.HandleException(this))
+            {
+                OnLoad();
+                return;
+            }
+            StartProgram();
+        }
+    }
+
+    private async Task OnLoadCore()
+    {
         progressBar.Visible = false;
         ignoreButton.Visible = true;
         updateButton.Text = "Update";
@@ -86,19 +105,22 @@ internal sealed partial class UpdateForm : CustomForm
                 if (release.Version <= currentVersion)
                     continue;
 #endif
+                if (release.Changes is null)
+                    continue;
                 TreeNode root = new(release.Name) { Name = release.Name };
                 changelogTreeView.Nodes.Add(root);
                 if (changelogTreeView.Nodes.Count > 0)
                     changelogTreeView.Nodes[0].EnsureVisible();
                 foreach (string change in release.Changes)
-                    Invoke(delegate
-                    {
-                        TreeNode changeNode = new() { Text = change };
-                        root.Nodes.Add(changeNode);
-                        root.Expand();
-                        if (changelogTreeView.Nodes.Count > 0)
-                            changelogTreeView.Nodes[0].EnsureVisible();
-                    });
+                {
+                    if (IsDisposed)
+                        return;
+                    TreeNode changeNode = new() { Text = change };
+                    root.Nodes.Add(changeNode);
+                    root.Expand();
+                    if (changelogTreeView.Nodes.Count > 0)
+                        changelogTreeView.Nodes[0].EnsureVisible();
+                }
             }
         }
     }

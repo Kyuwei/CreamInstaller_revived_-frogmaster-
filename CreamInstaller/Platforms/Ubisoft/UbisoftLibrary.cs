@@ -9,30 +9,28 @@ namespace CreamInstaller.Platforms.Ubisoft;
 
 internal static class UbisoftLibrary
 {
-    private static RegistryKey installsKey;
-
-    private static RegistryKey InstallsKey
-    {
-        get
-        {
-            installsKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Ubisoft\Launcher\Installs");
-            return installsKey;
-        }
-    }
-
     internal static async Task<List<(string gameId, string name, string gameDirectory)>> GetGames()
         => await Task.Run(() =>
         {
             List<(string gameId, string name, string gameDirectory)> games = new();
-            RegistryKey installsKey = InstallsKey;
+            // RegistryKey holds an unmanaged HKEY; both the parent and every
+            // subkey opened inside the loop are now disposed via `using`. The
+            // previous static-property pattern reopened the parent on every
+            // call and never closed it, leaking a registry handle per scan.
+            using RegistryKey installsKey =
+                Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Ubisoft\Launcher\Installs");
             if (installsKey is null)
                 return games;
             foreach (string gameId in installsKey.GetSubKeyNames())
             {
-                RegistryKey installKey = installsKey.OpenSubKey(gameId);
+                using RegistryKey installKey = installsKey.OpenSubKey(gameId);
                 string installDir = installKey?.GetValue("InstallDir")?.ToString()?.ResolvePath();
-                if (installDir is not null && games.All(g => g.gameId != gameId))
-                    games.Add((gameId, new DirectoryInfo(installDir).Name, installDir));
+                if (installDir is null || games.Any(g => g.gameId == gameId))
+                    continue;
+                string name;
+                try { name = new DirectoryInfo(installDir).Name; }
+                catch { name = Path.GetFileName(installDir) ?? gameId; }
+                games.Add((gameId, name, installDir));
             }
 
             return games;
