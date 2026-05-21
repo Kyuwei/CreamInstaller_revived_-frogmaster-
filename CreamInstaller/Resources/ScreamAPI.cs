@@ -63,14 +63,11 @@ internal static class ScreamAPI
         }
         /*if (installForm is not null)
             installForm.UpdateUser("Generating ScreamAPI configuration for " + selection.Name + $" in directory \"{directory}\" . . . ", LogTextBox.Operation);*/
-        config.CreateFile(true, installForm)?.Close();
-        StreamWriter writer = new(config, true, Encoding.UTF8);
-        WriteConfig(writer,
-            new(overrideCatalogItems.ToDictionary(dlc => dlc.Id, dlc => dlc), PlatformIdComparer.String),
-            new(injectedEntitlements.ToDictionary(dlc => dlc.Id, dlc => dlc), PlatformIdComparer.String),
-            installForm);
-        writer.Flush();
-        writer.Close();
+        using (StreamWriter writer = new(config, false, Encoding.UTF8))
+            WriteConfig(writer,
+                new(overrideCatalogItems.ToDictionary(dlc => dlc.Id, dlc => dlc), PlatformIdComparer.String),
+                new(injectedEntitlements.ToDictionary(dlc => dlc.Id, dlc => dlc), PlatformIdComparer.String),
+                installForm);
     }
 
     private static void WriteConfig(StreamWriter writer, SortedList<string, SelectionDLC> overrideCatalogItems,

@@ -45,53 +45,66 @@ internal sealed class ContextMenuItem : ToolStripMenuItem
 
     private static async Task TryImageIdentifier(ContextMenuItem item, string imageIdentifier)
     {
-        if (Images.TryGetValue(imageIdentifier, out Image image) && image is not null)
+        try
         {
-            item.Image = image;
-            return;
-        }
-
-        image = await Task.Run(async () =>
-        {
-            switch (imageIdentifier)
+            if (Images.TryGetValue(imageIdentifier, out Image image) && image is not null)
             {
-                case "Paradox Launcher":
-                    if (ParadoxLauncher.InstallPath.DirectoryExists())
-                        foreach (string file in ParadoxLauncher.InstallPath.EnumerateDirectory("*.exe"))
-                            return file.GetFileIconImage();
-                    break;
-                case "Notepad":
-                    return IconGrabber.GetNotepadImage();
-                case "Command Prompt":
-                    return IconGrabber.GetCommandPromptImage();
-                case "File Explorer":
-                    return IconGrabber.GetFileExplorerImage();
-                case "SteamDB":
-                    return await HttpClientManager.GetImageFromUrl(
-                        IconGrabber.GetDomainFaviconUrl("steamdb.info"));
-                case "Steam Store":
-                    return await HttpClientManager.GetImageFromUrl(
-                        IconGrabber.GetDomainFaviconUrl("store.steampowered.com"));
-                case "Steam Community":
-                    return await HttpClientManager.GetImageFromUrl(
-                        IconGrabber.GetDomainFaviconUrl("steamcommunity.com"));
-                case "ScreamDB":
-                    return await HttpClientManager.GetImageFromUrl(
-                        IconGrabber.GetDomainFaviconUrl("scream-db.web.app"));
-                case "Epic Games":
-                    return await HttpClientManager.GetImageFromUrl(
-                        IconGrabber.GetDomainFaviconUrl("epicgames.com"));
-                case "Ubisoft Store":
-                    return await HttpClientManager.GetImageFromUrl(
-                        IconGrabber.GetDomainFaviconUrl("store.ubi.com"));
+                item.Image = image;
+                return;
             }
-            return null;
-        });
 
-        if (image is not null)
-        {
+            image = await Task.Run(async () =>
+            {
+                try
+                {
+                    switch (imageIdentifier)
+                    {
+                        case "Paradox Launcher":
+                            if (ParadoxLauncher.InstallPath.DirectoryExists())
+                                foreach (string file in ParadoxLauncher.InstallPath.EnumerateDirectory("*.exe"))
+                                    return file.GetFileIconImage();
+                            break;
+                        case "Notepad":
+                            return IconGrabber.GetNotepadImage();
+                        case "Command Prompt":
+                            return IconGrabber.GetCommandPromptImage();
+                        case "File Explorer":
+                            return IconGrabber.GetFileExplorerImage();
+                        case "SteamDB":
+                            return await HttpClientManager.GetImageFromUrl(
+                                IconGrabber.GetDomainFaviconUrl("steamdb.info"));
+                        case "Steam Store":
+                            return await HttpClientManager.GetImageFromUrl(
+                                IconGrabber.GetDomainFaviconUrl("store.steampowered.com"));
+                        case "Steam Community":
+                            return await HttpClientManager.GetImageFromUrl(
+                                IconGrabber.GetDomainFaviconUrl("steamcommunity.com"));
+                        case "ScreamDB":
+                            return await HttpClientManager.GetImageFromUrl(
+                                IconGrabber.GetDomainFaviconUrl("scream-db.web.app"));
+                        case "Epic Games":
+                            return await HttpClientManager.GetImageFromUrl(
+                                IconGrabber.GetDomainFaviconUrl("epicgames.com"));
+                        case "Ubisoft Store":
+                            return await HttpClientManager.GetImageFromUrl(
+                                IconGrabber.GetDomainFaviconUrl("store.ubi.com"));
+                    }
+                }
+                catch
+                {
+                    // Icon lookups are best-effort — never crash the menu over a missing icon.
+                }
+                return null;
+            });
+
+            if (image is null || item.IsDisposed)
+                return;
             Images[imageIdentifier] = image;
             item.Image = image;
+        }
+        catch
+        {
+            // Assigning Image on a disposed ToolStripMenuItem can throw — swallow.
         }
     }
 

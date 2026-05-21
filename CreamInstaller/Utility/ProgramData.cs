@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -10,6 +11,25 @@ namespace CreamInstaller.Utility;
 
 internal static class ProgramData
 {
+    private static readonly char[] InvalidIdentifierChars = Path.GetInvalidFileNameChars();
+
+    private static string SanitizeIdentifier(string identifier)
+    {
+        // Cache/cooldown identifiers come from Steam/Epic/Ubisoft APIs and end up
+        // in path construction. Replace anything that could escape the parent
+        // directory or otherwise create an invalid filename, including the path
+        // separators that Path.GetInvalidFileNameChars does not always include.
+        if (string.IsNullOrEmpty(identifier))
+            return null;
+        char[] buffer = new char[identifier.Length];
+        for (int i = 0; i < identifier.Length; i++)
+        {
+            char c = identifier[i];
+            buffer[i] = c is '/' or '\\' or ':' or '.' || Array.IndexOf(InvalidIdentifierChars, c) >= 0 ? '_' : c;
+        }
+        return new string(buffer);
+    }
+
     private static readonly string DirectoryPathOld =
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + @"\CreamInstaller";
 
@@ -64,14 +84,16 @@ internal static class ProgramData
 
     private static DateTime? GetCooldown(string identifier)
     {
-        if (!CooldownPath.DirectoryExists())
+        string sanitized = SanitizeIdentifier(identifier);
+        if (sanitized is null || !CooldownPath.DirectoryExists())
             return null;
-        string cooldownFile = CooldownPath + @$"\{identifier}.txt";
+        string cooldownFile = CooldownPath + @$"\{sanitized}.txt";
         if (!cooldownFile.FileExists())
             return null;
         try
         {
-            if (DateTime.TryParse(cooldownFile.ReadFile(), out DateTime cooldown))
+            if (DateTime.TryParse(cooldownFile.ReadFile(), CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind, out DateTime cooldown))
                 return cooldown;
         }
         catch
@@ -84,11 +106,14 @@ internal static class ProgramData
 
     private static void SetCooldown(string identifier, DateTime time)
     {
+        string sanitized = SanitizeIdentifier(identifier);
+        if (sanitized is null)
+            return;
         CooldownPath.CreateDirectory();
-        string cooldownFile = CooldownPath + @$"\{identifier}.txt";
+        string cooldownFile = CooldownPath + @$"\{sanitized}.txt";
         try
         {
-            cooldownFile.WriteFile(time.ToString(CultureInfo.InvariantCulture));
+            cooldownFile.WriteFile(time.ToString("O", CultureInfo.InvariantCulture));
         }
         catch
         {

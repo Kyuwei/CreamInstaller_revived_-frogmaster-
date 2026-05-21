@@ -41,12 +41,9 @@ internal static class UplayR2
         }
         /*if (installForm is not null)
             installForm.UpdateUser("Generating Uplay R2 Unlocker configuration for " + selection.Name + $" in directory \"{directory}\" . . . ", LogTextBox.Operation);*/
-        config.CreateFile(true, installForm)?.Close();
-        StreamWriter writer = new(config, true, Encoding.UTF8);
-        WriteConfig(writer, new(blacklistDlc.ToDictionary(dlc => dlc.Id, dlc => dlc), PlatformIdComparer.String),
-            installForm);
-        writer.Flush();
-        writer.Close();
+        using (StreamWriter writer = new(config, false, Encoding.UTF8))
+            WriteConfig(writer, new(blacklistDlc.ToDictionary(dlc => dlc.Id, dlc => dlc), PlatformIdComparer.String),
+                installForm);
     }
 
     private static void WriteConfig(StreamWriter writer, SortedList<string, SelectionDLC> blacklistDlc,

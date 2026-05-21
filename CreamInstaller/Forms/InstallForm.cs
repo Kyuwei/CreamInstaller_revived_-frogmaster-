@@ -31,28 +31,51 @@ internal sealed partial class InstallForm : CustomForm
 
     private void UpdateProgress(int progress)
     {
-        if (!userProgressBar.Disposing && !userProgressBar.IsDisposed)
+        if (userProgressBar.Disposing || userProgressBar.IsDisposed || !IsHandleCreated)
+            return;
+        try
+        {
             Invoke(() =>
             {
+                if (userProgressBar.IsDisposed || operationsCount == 0)
+                    return;
                 int value = (int)((float)completeOperationsCount / operationsCount * 100) + progress / operationsCount;
                 if (value < userProgressBar.Value)
                     return;
                 userProgressBar.Value = value;
             });
+        }
+        catch (ObjectDisposedException) { }
+        catch (InvalidOperationException) { }
     }
 
     internal void UpdateUser(string text, Color color, bool info = true, bool log = true)
     {
-        if (info)
-            _ = Invoke(() => userInfoLabel.Text = text);
-        if (log && !logTextBox.Disposing && !logTextBox.IsDisposed)
-            Invoke(() =>
-            {
-                if (logTextBox.Text.Length > 0)
-                    logTextBox.AppendText(Environment.NewLine, color);
-                logTextBox.AppendText(text, color);
-                logTextBox.Invalidate();
-            });
+        // The form can be closed mid-operation; guard every cross-thread call so
+        // a worker logging a final message can't crash the app on its way out.
+        if (Disposing || IsDisposed || !IsHandleCreated)
+            return;
+        try
+        {
+            if (info)
+                _ = Invoke(() =>
+                {
+                    if (!userInfoLabel.IsDisposed)
+                        userInfoLabel.Text = text;
+                });
+            if (log && !logTextBox.Disposing && !logTextBox.IsDisposed)
+                Invoke(() =>
+                {
+                    if (logTextBox.IsDisposed)
+                        return;
+                    if (logTextBox.Text.Length > 0)
+                        logTextBox.AppendText(Environment.NewLine, color);
+                    logTextBox.AppendText(text, color);
+                    logTextBox.Invalidate();
+                });
+        }
+        catch (ObjectDisposedException) { }
+        catch (InvalidOperationException) { }
     }
 
     private async Task OperateFor(Selection selection)
@@ -351,7 +374,7 @@ internal sealed partial class InstallForm : CustomForm
             ++completeOperationsCount;
         }
 
-        Program.Cleanup();
+        await Program.Cleanup();
         int activeCount = activeSelections.Count;
         if (activeCount > 0)
             if (activeCount == 1)
@@ -414,24 +437,34 @@ internal sealed partial class InstallForm : CustomForm
         }
     }
 
-    private void OnAccept(object sender, EventArgs e)
+    private async void OnAccept(object sender, EventArgs e)
     {
-        Program.Cleanup();
-        Close();
+        try { await Program.Cleanup(); }
+        catch { /* surfaced via global ThreadException handler if relevant */ }
+        if (!IsDisposed)
+            Close();
     }
 
-    private void OnRetry(object sender, EventArgs e)
+    private async void OnRetry(object sender, EventArgs e)
     {
-        Program.Cleanup();
-        Start();
+        try { await Program.Cleanup(); }
+        catch { /* surfaced via global ThreadException handler if relevant */ }
+        if (!IsDisposed)
+            Start();
     }
 
-    private void OnCancel(object sender, EventArgs e) => Program.Cleanup();
-
-    private void OnReselect(object sender, EventArgs e)
+    private async void OnCancel(object sender, EventArgs e)
     {
-        Program.Cleanup();
+        try { await Program.Cleanup(); }
+        catch { /* surfaced via global ThreadException handler if relevant */ }
+    }
+
+    private async void OnReselect(object sender, EventArgs e)
+    {
+        try { await Program.Cleanup(); }
+        catch { /* surfaced via global ThreadException handler if relevant */ }
         Reselecting = true;
-        Close();
+        if (!IsDisposed)
+            Close();
     }
 }

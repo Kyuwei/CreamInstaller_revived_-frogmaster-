@@ -38,13 +38,9 @@ internal static class CreamAPI
 
         config.DeleteFile();
         installForm?.UpdateUser($"Deleted unnecessary configuration: {Path.GetFileName(config)}", LogTextBox.Action, false);
-        config.CreateFile(true, installForm)?.Close();
-        StreamWriter writer = new(config, true, Encoding.Default);
-        WriteConfig(writer, selection.Name, !int.TryParse(selection.Id, out _) ? "0" : selection.Id,
-            new(dlc.ToDictionary(_dlc => _dlc.Id, _dlc => _dlc.Name), PlatformIdComparer.String), installForm);
-        writer.Flush();
-        writer.Close();
-        return;
+        using (StreamWriter writer = new(config, false, Encoding.Default))
+            WriteConfig(writer, selection.Name, !int.TryParse(selection.Id, out _) ? "0" : selection.Id,
+                new(dlc.ToDictionary(_dlc => _dlc.Id, _dlc => _dlc.Name), PlatformIdComparer.String), installForm);
     }
 
     private static void WriteConfig(StreamWriter writer, string name, string appId,

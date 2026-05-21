@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using CreamInstaller.Forms;
 using CreamInstaller.Utility;
@@ -15,10 +14,14 @@ internal static partial class SteamCMD
 
     private static async Task<CmdAppData> QueryWebAPI(string appId, bool isDlc = false, int attempts = 0)
     {
+        // Validate so we never let a malformed appId escape AppInfoPath via the
+        // filename or hit the Steam endpoint with a junk segment.
+        if (!int.TryParse(appId, out int parsedAppId) || parsedAppId <= 0)
+            return null;
         while (!Program.Canceled)
         {
             attempts++;
-            string cacheFile = ProgramData.AppInfoPath + @$"\{appId}.cmd.json";
+            string cacheFile = ProgramData.AppInfoPath + @$"\{parsedAppId}.cmd.json";
             bool cachedExists = cacheFile.FileExists();
             if (!cachedExists || ProgramData.CheckCooldown(appId + ".cmd", isDlc ? CooldownDlc : CooldownGame))
             {
@@ -115,7 +118,7 @@ internal static partial class SteamCMD
                 break;
             }
 
-            Thread.Sleep(1000);
+            await Task.Delay(1000).ConfigureAwait(false);
         }
 
         return null;

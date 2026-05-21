@@ -56,59 +56,56 @@ internal sealed partial class SelectForm : CustomForm
 
     private void UpdateRemainingGames() => UpdateRemaining(progressLabelGames, remainingGames, "games");
 
-    private void AddToRemainingGames(string gameName)
+    private void SafeInvoke(Action action)
     {
-        if (Program.Canceled)
+        // The remaining-* helpers are called from scan worker tasks. Without
+        // these guards a form-close during a scan would crash the host with
+        // ObjectDisposedException from Invoke, since IsDisposed checks are
+        // inherently racy.
+        if (action is null || Disposing || IsDisposed || !IsHandleCreated || Program.Canceled)
             return;
-        Invoke(delegate
+        try { Invoke(action); }
+        catch (ObjectDisposedException) { }
+        catch (InvalidOperationException) { }
+    }
+
+    private void AddToRemainingGames(string gameName)
+        => SafeInvoke(() =>
         {
             if (Program.Canceled)
                 return;
             remainingGames[gameName] = gameName;
             UpdateRemainingGames();
         });
-    }
 
     private void RemoveFromRemainingGames(string gameName)
-    {
-        if (Program.Canceled)
-            return;
-        Invoke(delegate
+        => SafeInvoke(() =>
         {
             if (Program.Canceled)
                 return;
             _ = remainingGames.Remove(gameName, out _);
             UpdateRemainingGames();
         });
-    }
 
     private void UpdateRemainingDLCs() => UpdateRemaining(progressLabelDLCs, remainingDLCs, "DLCs");
 
     private void AddToRemainingDLCs(string dlcId)
-    {
-        if (Program.Canceled)
-            return;
-        Invoke(delegate
+        => SafeInvoke(() =>
         {
             if (Program.Canceled)
                 return;
             remainingDLCs[dlcId] = dlcId;
             UpdateRemainingDLCs();
         });
-    }
 
     private void RemoveFromRemainingDLCs(string dlcId)
-    {
-        if (Program.Canceled)
-            return;
-        Invoke(delegate
+        => SafeInvoke(() =>
         {
             if (Program.Canceled)
                 return;
             _ = remainingDLCs.Remove(dlcId, out _);
             UpdateRemainingDLCs();
         });
-    }
     private static async Task<T> WithTimeout<T>(Task<T> task, int millisecondsTimeout)
     {
         if (await Task.WhenAny(task, Task.Delay(millisecondsTimeout)) == task)
@@ -350,7 +347,7 @@ internal sealed partial class SelectForm : CustomForm
                     selection.Website = storeAppData?.Website;
                     if (Program.Canceled)
                         return;
-                    Invoke(delegate
+                    SafeInvoke(() =>
                     {
                         if (Program.Canceled)
                             return;
@@ -461,7 +458,7 @@ internal sealed partial class SelectForm : CustomForm
 
                     if (Program.Canceled)
                         return;
-                    Invoke(delegate
+                    SafeInvoke(() =>
                     {
                         if (Program.Canceled)
                             return;
@@ -523,7 +520,7 @@ internal sealed partial class SelectForm : CustomForm
                         dllDirectories,
                         await gameDirectory.GetExecutableDirectories(true));
                     selection.Icon = IconGrabber.GetDomainFaviconUrl("store.ubi.com");
-                    Invoke(delegate
+                    SafeInvoke(() =>
                     {
                         if (Program.Canceled)
                             return;
@@ -549,6 +546,26 @@ internal sealed partial class SelectForm : CustomForm
     }
 
     private async void OnLoad(bool forceScan = false, bool forceProvideChoices = false)
+    {
+        try
+        {
+            await OnLoadCore(forceScan, forceProvideChoices);
+        }
+        catch (Exception e)
+        {
+            // Without this catch the exception would escape an async void method
+            // straight to the AppDomain's unhandled-exception handler and tear
+            // down the entire process during a scan/rescan.
+            if (!IsDisposed)
+            {
+                try { _ = e.HandleException(this); }
+                catch { /* fall through to graceful cancel */ }
+            }
+            Program.Canceled = true;
+        }
+    }
+
+    private async Task OnLoadCore(bool forceScan, bool forceProvideChoices)
     {
         Program.Canceled = false;
         blockedGamesCheckBox.Enabled = false;
@@ -1023,10 +1040,11 @@ internal sealed partial class SelectForm : CustomForm
 
     private void OnScan(object sender, EventArgs e) => OnLoad(forceProvideChoices: true);
 
-    private void OnCancel(object sender, EventArgs e)
+    private async void OnCancel(object sender, EventArgs e)
     {
         progressLabel.Text = "Cancelling . . . ";
-        Program.Cleanup();
+        try { await Program.Cleanup(); }
+        catch { /* surfaced via global ThreadException handler if relevant */ }
     }
 
     private void OnAllCheckBoxChanged(object sender, EventArgs e)
