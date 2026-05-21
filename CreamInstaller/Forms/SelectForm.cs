@@ -550,6 +550,26 @@ internal sealed partial class SelectForm : CustomForm
 
     private async void OnLoad(bool forceScan = false, bool forceProvideChoices = false)
     {
+        try
+        {
+            await OnLoadCore(forceScan, forceProvideChoices);
+        }
+        catch (Exception e)
+        {
+            // Without this catch the exception would escape an async void method
+            // straight to the AppDomain's unhandled-exception handler and tear
+            // down the entire process during a scan/rescan.
+            if (!IsDisposed)
+            {
+                try { _ = e.HandleException(this); }
+                catch { /* fall through to graceful cancel */ }
+            }
+            Program.Canceled = true;
+        }
+    }
+
+    private async Task OnLoadCore(bool forceScan, bool forceProvideChoices)
+    {
         Program.Canceled = false;
         blockedGamesCheckBox.Enabled = false;
         blockProtectedHelpButton.Enabled = false;

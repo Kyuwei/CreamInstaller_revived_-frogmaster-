@@ -22,15 +22,15 @@ internal static class EpicStore
         QueryCatalog(string categoryNamespace)
     {
         List<(string id, string name, string product, string icon, string developer)> dlcIds = [];
-        string cacheFile = ProgramData.AppInfoPath + @$"\{categoryNamespace}.json";
-        string fileContent = cacheFile.ReadFile();
-        if (string.IsNullOrWhiteSpace(fileContent) || fileContent.Trim() == "null")
+        string cacheFile = ProgramData.AppInfoPath + @$"\{SanitizeCacheKey(categoryNamespace)}.json";
+        string cachedContent = cacheFile.ReadFile();
+        if (string.IsNullOrWhiteSpace(cachedContent) || cachedContent.Trim() == "null")
         {
             cacheFile.DeleteFile();
+            cachedContent = null;
         }
-        bool cachedExists = cacheFile.FileExists();
         Response response = null;
-        if (!cachedExists || ProgramData.CheckCooldown(categoryNamespace, Cooldown))
+        if (cachedContent is null || ProgramData.CheckCooldown(categoryNamespace, Cooldown))
         {
             response = await QueryGraphQL(categoryNamespace);
 #if DEBUG
@@ -51,7 +51,7 @@ internal static class EpicStore
         else
             try
             {
-                response = JsonConvert.DeserializeObject<Response>(cacheFile.ReadFile());
+                response = JsonConvert.DeserializeObject<Response>(cachedContent);
             }
             catch
             {
@@ -67,16 +67,10 @@ internal static class EpicStore
             string product = element.CatalogNs?.Mappings is { Length: > 0 }
                 ? element.CatalogNs.Mappings.First().PageSlug
                 : null;
-            string icon = null;
-            for (int i = 0; i < element.KeyImages?.Length; i++)
-            {
-                KeyImage keyImage = element.KeyImages[i];
-                if (keyImage.Type != "DieselStoreFront")
-                    continue;
-                icon = keyImage.Url.ToString();
-                break;
-            }
+            string icon = PickKeyImageUrl(element.KeyImages, "DieselStoreFront");
 
+            if (element.Items is null)
+                continue;
             foreach (Item item in element.Items)
                 dlcIds.Populate(item.Id, title, product, icon, null, element.Items.Length == 1);
         }
@@ -88,21 +82,42 @@ internal static class EpicStore
             string product = element.CatalogNs?.Mappings is { Length: > 0 }
                 ? element.CatalogNs.Mappings.First().PageSlug
                 : null;
-            string icon = null;
-            for (int i = 0; i < element.KeyImages?.Length; i++)
-            {
-                KeyImage keyImage = element.KeyImages[i];
-                if (keyImage.Type != "Thumbnail")
-                    continue;
-                icon = keyImage.Url.ToString();
-                break;
-            }
+            string icon = PickKeyImageUrl(element.KeyImages, "Thumbnail");
 
+            if (element.Items is null)
+                continue;
             foreach (Item item in element.Items)
                 dlcIds.Populate(item.Id, title, product, icon, item.Developer, element.Items.Length == 1);
         }
 
         return dlcIds;
+    }
+
+    private static string PickKeyImageUrl(KeyImage[] keyImages, string preferredType)
+    {
+        if (keyImages is null)
+            return null;
+        foreach (KeyImage keyImage in keyImages)
+        {
+            if (keyImage is null || keyImage.Type != preferredType || keyImage.Url is null)
+                continue;
+            return keyImage.Url.ToString();
+        }
+        return null;
+    }
+
+    private static string SanitizeCacheKey(string key)
+    {
+        if (string.IsNullOrEmpty(key))
+            return "_";
+        char[] buffer = new char[key.Length];
+        char[] invalid = System.IO.Path.GetInvalidFileNameChars();
+        for (int i = 0; i < key.Length; i++)
+        {
+            char c = key[i];
+            buffer[i] = c is '/' or '\\' or ':' || Array.IndexOf(invalid, c) >= 0 ? '_' : c;
+        }
+        return new string(buffer);
     }
 
     private static void Populate(

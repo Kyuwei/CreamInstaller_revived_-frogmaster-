@@ -72,15 +72,12 @@ internal static class SmokeAPI
         }
         /*if (installForm is not null)
             installForm.UpdateUser("Generating SmokeAPI configuration for " + selection.Name + $" in directory \"{directory}\" . . . ", LogTextBox.Operation);*/
-        config.CreateFile(true, installForm)?.Close();
-        StreamWriter writer = new(config, true, Encoding.UTF8);
-        WriteConfig(writer, selection.Id,
-            new(extraApps.ToDictionary(extraApp => extraApp.Key, extraApp => extraApp.Value),
-                PlatformIdComparer.String),
-            new(overrideDlc.ToDictionary(dlc => dlc.Id, dlc => dlc), PlatformIdComparer.String),
-            new(injectDlc.ToDictionary(dlc => dlc.Id, dlc => dlc), PlatformIdComparer.String), installForm);
-        writer.Flush();
-        writer.Close();
+        using (StreamWriter writer = new(config, false, Encoding.UTF8))
+            WriteConfig(writer, selection.Id,
+                new(extraApps.ToDictionary(extraApp => extraApp.Key, extraApp => extraApp.Value),
+                    PlatformIdComparer.String),
+                new(overrideDlc.ToDictionary(dlc => dlc.Id, dlc => dlc), PlatformIdComparer.String),
+                new(injectDlc.ToDictionary(dlc => dlc.Id, dlc => dlc), PlatformIdComparer.String), installForm);
     }
 
     private static void WriteConfig(StreamWriter writer, string appId,

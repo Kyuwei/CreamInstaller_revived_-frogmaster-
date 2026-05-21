@@ -29,22 +29,52 @@ internal static class Diagnostics
     {
         string npp = NppPath + @"\notepad++.exe";
         if (npp.FileExists())
-            OpenFileInNotepadPlusPlus(npp, path);
+            StartProcess(npp, path);
         else
-            OpenFileInWindowsNotepad(path);
+            StartProcess("notepad.exe", path);
     }
 
-    private static void OpenFileInNotepadPlusPlus(string npp, string path) =>
-        Process.Start(new ProcessStartInfo { FileName = npp, Arguments = path });
+    internal static void OpenDirectoryInFileExplorer(string path) => StartProcess("explorer.exe", path);
 
-    private static void OpenFileInWindowsNotepad(string path) => Process.Start(new ProcessStartInfo
-        { FileName = "notepad.exe", Arguments = path });
+    internal static void OpenUrlInInternetBrowser(string url)
+    {
+        // Only allow http(s) URLs; UseShellExecute would happily launch
+        // javascript:, file:, ms-..., or arbitrary file paths otherwise.
+        if (string.IsNullOrWhiteSpace(url) ||
+            !Uri.TryCreate(url, UriKind.Absolute, out Uri uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            return;
+        try
+        {
+            using Process _ = Process.Start(new ProcessStartInfo
+            {
+                FileName = uri.AbsoluteUri,
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+            // Browser launch failures are non-fatal.
+        }
+    }
 
-    internal static void OpenDirectoryInFileExplorer(string path) => Process.Start(new ProcessStartInfo
-        { FileName = "explorer.exe", Arguments = path });
-
-    internal static void OpenUrlInInternetBrowser(string url) =>
-        Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+    private static void StartProcess(string fileName, string argument)
+    {
+        // Use ArgumentList so the runtime handles quoting/escaping — paths with
+        // spaces or quotes were previously passed as a raw command line and got
+        // truncated at the first whitespace.
+        ProcessStartInfo info = new() { FileName = fileName, UseShellExecute = false };
+        if (argument is not null)
+            info.ArgumentList.Add(argument);
+        try
+        {
+            using Process _ = Process.Start(info);
+        }
+        catch
+        {
+            // Launch failures should not crash the host app.
+        }
+    }
 
     internal static string ResolvePath(this string path)
     {

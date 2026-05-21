@@ -147,6 +147,8 @@ internal sealed partial class UpdateForm : CustomForm
         bool retry = true;
         try
         {
+            if (update is null)
+                throw new TaskCanceledException();
             if (cancellation is null || Program.Canceled)
                 throw new TaskCanceledException();
             using HttpResponseMessage response = await HttpClientManager.HttpClient.GetAsync(
@@ -182,15 +184,22 @@ internal sealed partial class UpdateForm : CustomForm
         {
             success = false;
         }
+        catch (OperationCanceledException)
+        {
+            success = false;
+        }
         catch (Exception ex)
         {
             retry = ex.HandleException(this, Program.Name + " encountered an exception while updating");
             success = false;
         }
 
-        cancellation?.Dispose();
-        cancellation = null;
-        await update.DisposeAsync();
+        // Atomically detach the token source before disposing so OnUpdateCancel
+        // can't observe a half-disposed instance.
+        CancellationTokenSource oldCancellation = Interlocked.Exchange(ref cancellation, null);
+        oldCancellation?.Dispose();
+        if (update is not null)
+            await update.DisposeAsync();
         bool canContinue = success && !Program.Canceled;
         if (canContinue)
             updateButton.Enabled = false;
@@ -218,20 +227,22 @@ internal sealed partial class UpdateForm : CustomForm
             _ = commands.AppendLine(CultureInfo.InvariantCulture, $"PAUSE");
 #endif
             _ = commands.AppendLine(CultureInfo.InvariantCulture, $"EXIT");
-            UpdaterPath.WriteFile(commands.ToString(), true, this, Encoding.Default);
-            Process process = new();
+            UpdaterPath.WriteFile(commands.ToString(), true, this, Encoding.UTF8);
             ProcessStartInfo startInfo = new()
             {
                 WorkingDirectory = ProgramData.DirectoryPath, FileName = "cmd.exe",
-                Arguments = $"/C START \"UPDATER\" /B {Path.GetFileName(UpdaterPath)}",
+                Arguments = $"/C START \"UPDATER\" /B \"{Path.GetFileName(UpdaterPath)}\"",
+                UseShellExecute = false,
 #if DEBUG
                 CreateNoWindow = false
 #else
                 CreateNoWindow = true
 #endif
             };
-            process.StartInfo = startInfo;
-            _ = process.Start();
+            using (Process.Start(startInfo))
+            {
+            }
+
             return;
         }
 
@@ -243,9 +254,11 @@ internal sealed partial class UpdateForm : CustomForm
 
     private void OnUpdateCancel(object sender, EventArgs e)
     {
-        cancellation?.Cancel();
-        cancellation?.Dispose();
-        cancellation = null;
+        // Just signal cancellation here — disposal happens after the awaiting
+        // download task observes the cancel and exits its catch block. Disposing
+        // immediately could throw ObjectDisposedException inside the download.
+        try { cancellation?.Cancel(); }
+        catch (ObjectDisposedException) { /* already disposed by completion path */ }
     }
 
     protected override void Dispose(bool disposing)
