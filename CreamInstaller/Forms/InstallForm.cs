@@ -351,7 +351,7 @@ internal sealed partial class InstallForm : CustomForm
             ++completeOperationsCount;
         }
 
-        Program.Cleanup();
+        await Program.Cleanup();
         int activeCount = activeSelections.Count;
         if (activeCount > 0)
             if (activeCount == 1)
@@ -414,24 +414,34 @@ internal sealed partial class InstallForm : CustomForm
         }
     }
 
-    private void OnAccept(object sender, EventArgs e)
+    private async void OnAccept(object sender, EventArgs e)
     {
-        Program.Cleanup();
-        Close();
+        try { await Program.Cleanup(); }
+        catch { /* surfaced via global ThreadException handler if relevant */ }
+        if (!IsDisposed)
+            Close();
     }
 
-    private void OnRetry(object sender, EventArgs e)
+    private async void OnRetry(object sender, EventArgs e)
     {
-        Program.Cleanup();
-        Start();
+        try { await Program.Cleanup(); }
+        catch { /* surfaced via global ThreadException handler if relevant */ }
+        if (!IsDisposed)
+            Start();
     }
 
-    private void OnCancel(object sender, EventArgs e) => Program.Cleanup();
-
-    private void OnReselect(object sender, EventArgs e)
+    private async void OnCancel(object sender, EventArgs e)
     {
-        Program.Cleanup();
+        try { await Program.Cleanup(); }
+        catch { /* surfaced via global ThreadException handler if relevant */ }
+    }
+
+    private async void OnReselect(object sender, EventArgs e)
+    {
+        try { await Program.Cleanup(); }
+        catch { /* surfaced via global ThreadException handler if relevant */ }
         Reselecting = true;
-        Close();
+        if (!IsDisposed)
+            Close();
     }
 }

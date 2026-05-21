@@ -100,7 +100,18 @@ internal static class Program
 
     private static void OnApplicationExit(object s, EventArgs e)
     {
-        Cleanup();
+        // The process is exiting so blocking here is acceptable; we must wait
+        // for SteamCMD to be killed and the appcache directory to be deleted
+        // before we tear down the HttpClient, otherwise outstanding requests
+        // would observe an ObjectDisposedException.
+        try
+        {
+            Cleanup().GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // Application is exiting — swallow to avoid blocking shutdown.
+        }
         HttpClientManager.Dispose();
     }
 }

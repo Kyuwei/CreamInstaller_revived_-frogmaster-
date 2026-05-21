@@ -51,76 +51,82 @@ internal static partial class SteamCMD
                 if (Program.Canceled)
                     return "";
                 for (int i = 0; i < Locks.Length; i++)
-            {
-                if (Program.Canceled)
-                    return "";
-                if (Interlocked.CompareExchange(ref Locks[i], 1, 0) != 0)
-                    continue;
-                if (appId != null)
-                {
-                    AttemptCount.AddOrUpdate(appId, 1, (_, count) => count + 1);
-                }
-
-                if (Program.Canceled)
-                    return "";
-                ProcessStartInfo processStartInfo = new()
-                {
-                    FileName = FilePath, RedirectStandardOutput = true, RedirectStandardInput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false, Arguments = appId is null ? "+quit" : GetArguments(appId),
-                    CreateNoWindow = true,
-                    StandardInputEncoding = Encoding.UTF8, StandardOutputEncoding = Encoding.UTF8,
-                    StandardErrorEncoding = Encoding.UTF8
-                };
-                Process process = Process.Start(processStartInfo);
-                StringBuilder output = new();
-                StringBuilder appInfo = new();
-                bool appInfoStarted = false;
-                DateTime lastOutput = DateTime.UtcNow;
-                while (process != null)
                 {
                     if (Program.Canceled)
-                    {
-                        process.Kill(true);
-                        process.Close();
-                        break;
-                    }
-
-                    int c = process.StandardOutput.Read();
-                    if (c != -1)
-                    {
-                        lastOutput = DateTime.UtcNow;
-                        char ch = (char)c;
-                        if (ch == '{')
-                            appInfoStarted = true;
-                        _ = appInfoStarted ? appInfo.Append(ch) : output.Append(ch);
-                    }
-
-                    DateTime now = DateTime.UtcNow;
-                    TimeSpan timeDiff = now - lastOutput;
-                    if (!(timeDiff.TotalSeconds > 0.1))
+                        return "";
+                    if (Interlocked.CompareExchange(ref Locks[i], 1, 0) != 0)
                         continue;
-                    process.Kill(true);
-                    process.Close();
-                    if (appId != null &&
-                        output.ToString().Contains($"No app info for AppID {appId} found, requesting..."))
+                    try
                     {
-                        AttemptCount.AddOrUpdate(appId, 1, (_, count) => count + 1);
-                        processStartInfo.Arguments = GetArguments(appId);
-                        process = Process.Start(processStartInfo);
-                        appInfoStarted = false;
-                        _ = output.Clear();
-                        _ = appInfo.Clear();
+                        if (appId != null)
+                            AttemptCount.AddOrUpdate(appId, 1, (_, count) => count + 1);
+
+                        if (Program.Canceled)
+                            return "";
+                        ProcessStartInfo processStartInfo = new()
+                        {
+                            FileName = FilePath, RedirectStandardOutput = true, RedirectStandardInput = true,
+                            RedirectStandardError = true,
+                            UseShellExecute = false, Arguments = appId is null ? "+quit" : GetArguments(appId),
+                            CreateNoWindow = true,
+                            StandardInputEncoding = Encoding.UTF8, StandardOutputEncoding = Encoding.UTF8,
+                            StandardErrorEncoding = Encoding.UTF8
+                        };
+                        Process process = Process.Start(processStartInfo);
+                        StringBuilder output = new();
+                        StringBuilder appInfo = new();
+                        bool appInfoStarted = false;
+                        DateTime lastOutput = DateTime.UtcNow;
+                        while (process != null)
+                        {
+                            if (Program.Canceled)
+                            {
+                                try { process.Kill(true); } catch { }
+                                process.Close();
+                                break;
+                            }
+
+                            int c = process.StandardOutput.Read();
+                            if (c != -1)
+                            {
+                                lastOutput = DateTime.UtcNow;
+                                char ch = (char)c;
+                                if (ch == '{')
+                                    appInfoStarted = true;
+                                _ = appInfoStarted ? appInfo.Append(ch) : output.Append(ch);
+                            }
+
+                            DateTime now = DateTime.UtcNow;
+                            TimeSpan timeDiff = now - lastOutput;
+                            if (!(timeDiff.TotalSeconds > 0.1))
+                                continue;
+                            try { process.Kill(true); } catch { }
+                            process.Close();
+                            if (appId != null &&
+                                output.ToString().Contains($"No app info for AppID {appId} found, requesting..."))
+                            {
+                                AttemptCount.AddOrUpdate(appId, 1, (_, count) => count + 1);
+                                processStartInfo.Arguments = GetArguments(appId);
+                                process = Process.Start(processStartInfo);
+                                appInfoStarted = false;
+                                _ = output.Clear();
+                                _ = appInfo.Clear();
+                            }
+                            else
+                                break;
+                        }
+
+                        return appInfo.ToString();
                     }
-                    else
-                        break;
+                    finally
+                    {
+                        // Always release the slot to avoid a deadlock if the
+                        // operation above throws or is canceled mid-flight.
+                        _ = Interlocked.Exchange(ref Locks[i], 0);
+                    }
                 }
 
-                _ = Interlocked.Decrement(ref Locks[i]);
-                return appInfo.ToString();
-            }
-
-            Thread.Sleep(200);
+                Thread.Sleep(200);
             }
         });
 

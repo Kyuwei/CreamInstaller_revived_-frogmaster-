@@ -1023,10 +1023,11 @@ internal sealed partial class SelectForm : CustomForm
 
     private void OnScan(object sender, EventArgs e) => OnLoad(forceProvideChoices: true);
 
-    private void OnCancel(object sender, EventArgs e)
+    private async void OnCancel(object sender, EventArgs e)
     {
         progressLabel.Text = "Cancelling . . . ";
-        Program.Cleanup();
+        try { await Program.Cleanup(); }
+        catch { /* surfaced via global ThreadException handler if relevant */ }
     }
 
     private void OnAllCheckBoxChanged(object sender, EventArgs e)

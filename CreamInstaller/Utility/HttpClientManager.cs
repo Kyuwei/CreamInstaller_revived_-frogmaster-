@@ -2,8 +2,10 @@
 using System.Collections.Concurrent;
 using System.Drawing;
 using System.Globalization;
+using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 #if DEBUG
 using CreamInstaller.Forms;
@@ -13,24 +15,34 @@ namespace CreamInstaller.Utility;
 
 internal static class HttpClientManager
 {
+    private static readonly object SetupLock = new();
+
     internal static HttpClient HttpClient;
 
     private static readonly ConcurrentDictionary<string, string> HttpContentCache = new();
 
     internal static void Setup()
     {
-        HttpClient?.Dispose();
-        HttpClient = new();
-        if (CreamInstaller.Platforms.Epic.EpicStore.EpicBool)
+        lock (SetupLock)
         {
-            HttpClient.DefaultRequestHeaders.UserAgent.Add(new("EpicGamesLauncher", "18.9.0-45233261+++Portal+Release-Live"));
-            CreamInstaller.Platforms.Epic.EpicStore.EpicBool = false;
+            HttpClient old = HttpClient;
+            HttpClient fresh = new() { Timeout = TimeSpan.FromSeconds(30) };
+            if (CreamInstaller.Platforms.Epic.EpicStore.EpicBool)
+            {
+                fresh.DefaultRequestHeaders.UserAgent.Add(new("EpicGamesLauncher", "18.9.0-45233261+++Portal+Release-Live"));
+                CreamInstaller.Platforms.Epic.EpicStore.EpicBool = false;
+            }
+            else
+            {
+                fresh.DefaultRequestHeaders.UserAgent.Add(new(Program.Name, Program.Version));
+            }
+            fresh.DefaultRequestHeaders.AcceptLanguage.Add(new(CultureInfo.CurrentCulture.ToString()));
+
+            // Publish the new client before disposing the old one so concurrent
+            // readers never observe a disposed HttpClient.
+            HttpClient = fresh;
+            old?.Dispose();
         }
-        else
-        {
-            HttpClient.DefaultRequestHeaders.UserAgent.Add(new(Program.Name, Program.Version));
-        }
-        HttpClient.DefaultRequestHeaders.AcceptLanguage.Add(new(CultureInfo.CurrentCulture.ToString()));
     }
 
     internal static async Task<string> EnsureGet(string url)
@@ -81,7 +93,17 @@ internal static class HttpClientManager
     {
         try
         {
-            return new Bitmap(await HttpClient.GetStreamAsync(new Uri(url)));
+            // Copy into a MemoryStream so the network stream can be released
+            // immediately. `new Bitmap(stream)` would otherwise hold the
+            // network stream open for the lifetime of the Bitmap.
+            HttpClient client = HttpClient;
+            if (client is null)
+                return null;
+            await using Stream net = await client.GetStreamAsync(new Uri(url));
+            MemoryStream buffer = new();
+            await net.CopyToAsync(buffer);
+            buffer.Position = 0;
+            return new Bitmap(buffer);
         }
         catch
         {
@@ -89,5 +111,12 @@ internal static class HttpClientManager
         }
     }
 
-    internal static void Dispose() => HttpClient?.Dispose();
+    internal static void Dispose()
+    {
+        lock (SetupLock)
+        {
+            HttpClient client = Interlocked.Exchange(ref HttpClient, null);
+            client?.Dispose();
+        }
+    }
 }
