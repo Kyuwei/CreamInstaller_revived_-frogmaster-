@@ -73,12 +73,23 @@ internal sealed partial class DebugForm : CustomForm
 
     internal void Log(string text, Color color)
     {
-        if (!debugTextBox.Disposing && !debugTextBox.IsDisposed)
+        // IsDisposed -> Invoke is racy: the form can be torn down between the
+        // check and the marshal. Swallow the post-shutdown exceptions so
+        // background tasks logging during teardown don't crash the process.
+        if (debugTextBox.Disposing || debugTextBox.IsDisposed || !IsHandleCreated)
+            return;
+        try
+        {
             Invoke(() =>
             {
+                if (debugTextBox.IsDisposed)
+                    return;
                 if (debugTextBox.Text.Length > 0)
                     debugTextBox.AppendText(Environment.NewLine, color, true);
                 debugTextBox.AppendText(text, color, true);
             });
+        }
+        catch (ObjectDisposedException) { }
+        catch (InvalidOperationException) { }
     }
 }

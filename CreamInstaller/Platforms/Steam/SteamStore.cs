@@ -1,7 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using CreamInstaller.Utility;
 using Newtonsoft.Json;
@@ -22,7 +21,7 @@ internal static class SteamStore
         => await Task.Run(() =>
         {
             HashSet<string> dlcIds = new();
-            if (storeAppData.DLC is null)
+            if (storeAppData?.DLC is null)
                 return dlcIds;
             foreach (string dlcId in from appId in storeAppData.DLC
                      where appId > 0
@@ -33,15 +32,19 @@ internal static class SteamStore
 
     internal static async Task<StoreAppData> QueryStoreAPI(string appId, bool isDlc = false, int attempts = 0)
     {
+        // Validate so we never let a malformed appId escape AppInfoPath via the
+        // filename or hit the Steam endpoint with a junk segment.
+        if (!int.TryParse(appId, out int parsedAppId) || parsedAppId <= 0)
+            return null;
         while (!Program.Canceled)
         {
             attempts++;
-            string cacheFile = ProgramData.AppInfoPath + @$"\{appId}.json";
+            string cacheFile = ProgramData.AppInfoPath + @$"\{parsedAppId}.json";
             bool cachedExists = cacheFile.FileExists();
-            if (!cachedExists || ProgramData.CheckCooldown(appId, isDlc ? CooldownDlc : CooldownGame))
+            if (!cachedExists || ProgramData.CheckCooldown(parsedAppId.ToString(CultureInfo.InvariantCulture), isDlc ? CooldownDlc : CooldownGame))
             {
                 string response =
-                    await HttpClientManager.EnsureGet($"https://store.steampowered.com/api/appdetails?appids={appId}");
+                    await HttpClientManager.EnsureGet($"https://store.steampowered.com/api/appdetails?appids={parsedAppId}");
                 if (response is not null)
                 {
                     Dictionary<string, JToken> apps =
@@ -153,7 +156,7 @@ internal static class SteamStore
                 break;
             }
 
-            Thread.Sleep(1000);
+            await Task.Delay(1000).ConfigureAwait(false);
         }
 
         return null;

@@ -56,59 +56,56 @@ internal sealed partial class SelectForm : CustomForm
 
     private void UpdateRemainingGames() => UpdateRemaining(progressLabelGames, remainingGames, "games");
 
-    private void AddToRemainingGames(string gameName)
+    private void SafeInvoke(Action action)
     {
-        if (Program.Canceled)
+        // The remaining-* helpers are called from scan worker tasks. Without
+        // these guards a form-close during a scan would crash the host with
+        // ObjectDisposedException from Invoke, since IsDisposed checks are
+        // inherently racy.
+        if (action is null || Disposing || IsDisposed || !IsHandleCreated || Program.Canceled)
             return;
-        Invoke(delegate
+        try { Invoke(action); }
+        catch (ObjectDisposedException) { }
+        catch (InvalidOperationException) { }
+    }
+
+    private void AddToRemainingGames(string gameName)
+        => SafeInvoke(() =>
         {
             if (Program.Canceled)
                 return;
             remainingGames[gameName] = gameName;
             UpdateRemainingGames();
         });
-    }
 
     private void RemoveFromRemainingGames(string gameName)
-    {
-        if (Program.Canceled)
-            return;
-        Invoke(delegate
+        => SafeInvoke(() =>
         {
             if (Program.Canceled)
                 return;
             _ = remainingGames.Remove(gameName, out _);
             UpdateRemainingGames();
         });
-    }
 
     private void UpdateRemainingDLCs() => UpdateRemaining(progressLabelDLCs, remainingDLCs, "DLCs");
 
     private void AddToRemainingDLCs(string dlcId)
-    {
-        if (Program.Canceled)
-            return;
-        Invoke(delegate
+        => SafeInvoke(() =>
         {
             if (Program.Canceled)
                 return;
             remainingDLCs[dlcId] = dlcId;
             UpdateRemainingDLCs();
         });
-    }
 
     private void RemoveFromRemainingDLCs(string dlcId)
-    {
-        if (Program.Canceled)
-            return;
-        Invoke(delegate
+        => SafeInvoke(() =>
         {
             if (Program.Canceled)
                 return;
             _ = remainingDLCs.Remove(dlcId, out _);
             UpdateRemainingDLCs();
         });
-    }
     private static async Task<T> WithTimeout<T>(Task<T> task, int millisecondsTimeout)
     {
         if (await Task.WhenAny(task, Task.Delay(millisecondsTimeout)) == task)
@@ -350,7 +347,7 @@ internal sealed partial class SelectForm : CustomForm
                     selection.Website = storeAppData?.Website;
                     if (Program.Canceled)
                         return;
-                    Invoke(delegate
+                    SafeInvoke(() =>
                     {
                         if (Program.Canceled)
                             return;
@@ -461,7 +458,7 @@ internal sealed partial class SelectForm : CustomForm
 
                     if (Program.Canceled)
                         return;
-                    Invoke(delegate
+                    SafeInvoke(() =>
                     {
                         if (Program.Canceled)
                             return;
@@ -523,7 +520,7 @@ internal sealed partial class SelectForm : CustomForm
                         dllDirectories,
                         await gameDirectory.GetExecutableDirectories(true));
                     selection.Icon = IconGrabber.GetDomainFaviconUrl("store.ubi.com");
-                    Invoke(delegate
+                    SafeInvoke(() =>
                     {
                         if (Program.Canceled)
                             return;
