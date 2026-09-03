@@ -20,6 +20,11 @@ jobs:
   release:
     runs-on: windows-latest
 
+    # The default GITHUB_TOKEN is read-only unless the repository opts in, which
+    # makes both the tag push and the release creation fail with a 403.
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
