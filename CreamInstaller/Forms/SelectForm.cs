@@ -590,17 +590,22 @@ internal sealed partial class SelectForm : CustomForm
         if (!scan && (programsToScan is null || programsToScan.Count < 1 || forceProvideChoices))
         {
             List<(Platform platform, string id, string name, bool alreadySelected)> gameChoices = new();
+            HashSet<string> paradoxGameAppIds = [];
             if (ParadoxLauncher.InstallPath.DirectoryExists())
                 gameChoices.Add((Platform.Paradox, "PL", "Paradox Launcher",
                     programsToScan is not null &&
                     programsToScan.Any(p => p.platform is Platform.Paradox && p.id == "PL")));
             if (SteamLibrary.InstallPath.DirectoryExists())
-                foreach ((string appId, string name, string _, int _, string _) in
+                foreach ((string appId, string name, string _, int _, string gameDirectory) in
                          (await SteamLibrary.GetGames()).Where(g
                              => !Program.IsGameBlocked(g.name, g.gameDirectory)))
+                {
                     gameChoices.Add((Platform.Steam, appId, name,
                         programsToScan is not null &&
                         programsToScan.Any(p => p.platform is Platform.Steam && p.id == appId)));
+                    if (gameDirectory.IsParadoxGame())
+                        _ = paradoxGameAppIds.Add(appId);
+                }
             if (EpicLibrary.EpicManifestsPath.DirectoryExists() || HeroicLibrary.HeroicLibraryPath.DirectoryExists())
                 gameChoices.AddRange((await EpicLibrary.GetGames())
                     .Where(m => !Program.IsGameBlocked(m.DisplayName, m.InstallLocation)).Select(manifest
@@ -650,6 +655,12 @@ internal sealed partial class SelectForm : CustomForm
                 const string retry = "\n\nPress the \"Rescan\" button to re-choose.";
                 if (scan)
                 {
+                    // Paradox games are gated by the Paradox Launcher, so scanning one without the other leaves
+                    // the DLC locked in-game; pull the launcher in rather than silently producing that outcome.
+                    if (ParadoxLauncher.InstallPath.DirectoryExists()
+                        && choices.Any(c => c.platform is Platform.Steam && paradoxGameAppIds.Contains(c.id))
+                        && !choices.Any(c => c.platform is Platform.Paradox && c.id == "PL"))
+                        choices.Insert(0, (Platform.Paradox, "PL", "Paradox Launcher"));
                     programsToScan = choices;
                     noneFoundLabel.Text = "None of the chosen programs nor games were applicable!" + retry;
                 }
@@ -941,6 +952,28 @@ internal sealed partial class SelectForm : CustomForm
                             _ = items.Add(new ContextMenuItem($"Open Uplay R2 Directory #{++r2}", "File Explorer",
                                 (_, _) => Diagnostics.OpenDirectoryInFileExplorer(directory)));
                     }
+
+                if (selection.IsParadoxGame)
+                {
+                    string dataDirectory = ParadoxGame.GetDataDirectory(selection.RootDirectory, selection.Name);
+                    if (dataDirectory.DirectoryExists())
+                    {
+                        _ = items.Add(new ToolStripSeparator());
+                        _ = items.Add(new ContextMenuItem("Open Paradox Data Directory", "File Explorer",
+                            (_, _) => Diagnostics.OpenDirectoryInFileExplorer(dataDirectory)));
+                        string dlcLoad = ParadoxGame.GetDlcLoadPath(selection.RootDirectory, selection.Name);
+                        if (dlcLoad.FileExists())
+                        {
+                            _ = items.Add(new ContextMenuItem("Open DLC Load Order", "Notepad",
+                                (_, _) => Diagnostics.OpenFileInNotepad(dlcLoad)));
+                            async void RepairDlcLoadHandler(object sender, EventArgs e)
+                                => await ParadoxGame.RepairDlcLoad(this, selection);
+
+                            _ = items.Add(new ContextMenuItem("Repair DLC Load Order", "Command Prompt",
+                                RepairDlcLoadHandler));
+                        }
+                    }
+                }
             }
 
             if (id != "PL")
@@ -1008,7 +1041,8 @@ internal sealed partial class SelectForm : CustomForm
 
     private void OnAccept(bool uninstall = false)
     {
-        if (Selection.All.IsEmpty || !uninstall && ParadoxLauncher.DlcDialog(this))
+        if (Selection.All.IsEmpty
+            || !uninstall && (ParadoxLauncher.DlcDialog(this) || ParadoxLauncher.MissingLauncherDialog(this)))
             return;
         Hide();
         InstallForm form = new(uninstall);

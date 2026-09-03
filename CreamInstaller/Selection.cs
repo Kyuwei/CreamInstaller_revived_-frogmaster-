@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Forms;
 using CreamInstaller.Forms;
+using CreamInstaller.Platforms.Paradox;
 using CreamInstaller.Resources;
 using CreamInstaller.Utility;
 using static CreamInstaller.Resources.Resources;
@@ -73,6 +74,13 @@ internal sealed class Selection : IEquatable<Selection>
     }
 
     internal static IEnumerable<Selection> AllEnabled => All.Keys.Where(s => s.Enabled);
+
+    /// <summary>
+    ///     Whether this is a game distributed with the Paradox Launcher; such games need the launcher itself to be
+    ///     patched as well, and their DLC load order kept in sync. See
+    ///     <see cref="Platforms.Paradox.ParadoxGame" />.
+    /// </summary>
+    internal bool IsParadoxGame => Platform is not Platform.Paradox && RootDirectory.IsParadoxGame();
 
     internal bool Enabled
     {

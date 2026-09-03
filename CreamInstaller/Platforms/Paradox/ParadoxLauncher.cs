@@ -38,15 +38,20 @@ internal static class ParadoxLauncher
         if (paradoxLauncher is null)
             return;
         paradoxLauncher.ExtraSelections.Clear();
-        foreach (Selection selection in Selection.AllEnabled.Where(s =>
-                     !s.Equals(paradoxLauncher) && s.Publisher == "Paradox Interactive"))
+        foreach (Selection selection in Selection.AllEnabled.Where(s => !s.Equals(paradoxLauncher) && IsParadox(s)))
             _ = paradoxLauncher.ExtraSelections.Add(selection);
         if (paradoxLauncher.ExtraSelections.Count > 0)
             return;
-        foreach (Selection selection in Selection.All.Keys.Where(s =>
-                     !s.Equals(paradoxLauncher) && s.Publisher == "Paradox Interactive"))
+        foreach (Selection selection in Selection.All.Keys.Where(s => !s.Equals(paradoxLauncher) && IsParadox(s)))
             _ = paradoxLauncher.ExtraSelections.Add(selection);
     }
+
+    /// <summary>
+    ///     The store publisher string alone misses games whose store entry names a different publisher, so also
+    ///     accept anything that ships the Paradox Launcher's own files in its game directory.
+    /// </summary>
+    private static bool IsParadox(Selection selection)
+        => selection.Publisher == "Paradox Interactive" || selection.IsParadoxGame;
 
     internal static bool DlcDialog(Form form)
     {
@@ -60,6 +65,30 @@ internal static class ParadoxLauncher
         return dialogForm.Show(SystemIcons.Warning,
             "WARNING: There are no scanned games with DLC that can be added to the Paradox Launcher!"
             + "\n\nInstalling DLC unlockers for the Paradox Launcher alone can cause existing configurations to be deleted!",
+            "Ignore", "Cancel",
+            "Paradox Launcher") != DialogResult.OK;
+    }
+
+    /// <summary>
+    ///     The inverse of <see cref="DlcDialog" />: Paradox games were selected, but the launcher that gates their
+    ///     DLC was not. Installing an unlocker for the game alone leaves the DLC locked in-game, which is the most
+    ///     common reason Paradox titles appear to install successfully yet unlock nothing.
+    /// </summary>
+    internal static bool MissingLauncherDialog(Form form)
+    {
+        Selection paradoxLauncher = Selection.FromId(Platform.Paradox, "PL");
+        if (paradoxLauncher is not null && paradoxLauncher.Enabled)
+            return false;
+        if (!Selection.AllEnabled.Any(selection => selection.IsParadoxGame))
+            return false;
+        using DialogForm dialogForm = new(form);
+        return dialogForm.Show(SystemIcons.Warning,
+            "WARNING: You selected Paradox Interactive game(s), but not the Paradox Launcher!"
+            + "\n\nThe launcher is a separate program that decides which DLC the game is allowed to load,"
+            + " so the DLC will most likely stay locked in-game even though the unlocker installs successfully."
+            + (InstallPath.DirectoryExists()
+                ? "\n\nPress the \"Rescan\" button and make sure \"Paradox Launcher\" is chosen and checked."
+                : "\n\nThe Paradox Launcher could not be found on your computer."),
             "Ignore", "Cancel",
             "Paradox Launcher") != DialogResult.OK;
     }
