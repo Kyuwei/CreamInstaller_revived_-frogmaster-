@@ -15,6 +15,7 @@ utilizing the gathered information for the maintenance of DLC unlockers.
 The primary function of the program is to **automatically generate and install DLC unlockers** for whichever
 games and DLCs the user selects; however, through the use of **right-click context menus** the user can also:
 * automatically repair the Paradox Launcher
+* repair the DLC load order of a Paradox game and open its data directory
 * open parsed Steam and/or Epic Games appinfo in Notepad(++)
 * refresh parsed Steam and/or Epic Games appinfo
 * open root game directories and important DLL directories in Explorer
@@ -27,6 +28,7 @@ games and DLCs the user selects; however, through the use of **right-click conte
 * Automatic DLL installation and configuration generation for CreamAPI, Koaloader, ScreamAPI, Uplay R1 Unlocker and Uplay R2 Unlocker.
 * Automatic uninstallation of DLLs and configurations for CreamAPI, Koaloader, SmokeAPI, ScreamAPI, Uplay R1 Unlocker and Uplay R2 Unlocker.
 * Automatic reparation of the Paradox Launcher (and manually via the right-click context menu "Repair" option). *For when the launcher updates whilst you have CreamAPI, SmokeAPI or ScreamAPI installed to it.*
+* Dedicated support for Paradox Interactive games such as Hearts of Iron IV, Europa Universalis IV, Crusader Kings III, Stellaris and Victoria 3. *The Paradox Launcher is pulled into the scan automatically alongside them, and their DLC load order is kept in sync with your selection.* See [Paradox Interactive games](#paradox-interactive-games-hearts-of-iron-iv-eu4-ck3-stellaris) below.
 ---
 <details>
   <summary><strong>Continuous Integration (CI) Builds</strong></summary>
@@ -85,6 +87,30 @@ If you’re having trouble, try the following:
 - Review the [Usage section](https://github.com/FroggMaster/CreamInstaller#usage) for proper setup  
 - Visit the [CS.RIN.RU forum](https://cs.rin.ru/forum/viewforum.php?f=10) for game-specific troubleshooting and compatibility info
 
+
+---
+
+### Paradox Interactive games (Hearts of Iron IV, EU4, CK3, Stellaris)
+
+Paradox games need two extra things that a normal Steam game does not, and the program now handles both:
+
+**1. The Paradox Launcher has to be patched too.**
+These games are not started directly — Steam starts the Paradox Launcher, and *the launcher* decides which DLC
+the game is allowed to load. Installing an unlocker into the game folder alone therefore installs successfully
+and unlocks nothing. Whenever you choose a Paradox game to scan, "Paradox Launcher" is now added to the scan
+automatically; if it ends up unchecked or is not installed, you get a warning before the installation starts.
+
+**2. The launcher's DLC load order has to be corrected.**
+The launcher writes every DLC it considers unowned into `dlc_load.json` inside the game's data directory
+(by default `Documents\Paradox Interactive\<Game>`), and the game obeys that file no matter what the patched
+Steamworks DLL reports. After installing, the program rewrites that file so the DLC you selected is allowed to
+load and the DLC you deselected stays disabled; your enabled mods and everything else in the file are left
+untouched. The original file is backed up as `dlc_load.json.creaminstaller.bak` before the first change and is
+restored when you uninstall. You can also trigger this by hand with the "Repair DLC Load Order" right-click
+option on the game.
+
+Unlike most games, Paradox titles ship their DLC content inside the base game download (the `dlc` folder), so
+there are usually no DLC files for you to install manually.
 
 ---
 

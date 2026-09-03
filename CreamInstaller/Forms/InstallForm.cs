@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using CreamInstaller.Components;
+using CreamInstaller.Platforms.Paradox;
 using CreamInstaller.Resources;
 using CreamInstaller.Utility;
 using static CreamInstaller.Platforms.Paradox.ParadoxLauncher;
@@ -346,6 +347,19 @@ internal sealed partial class InstallForm : CustomForm
                     await Koaloader.Install(directory, binaryType, selection, selection.RootDirectory, this);
                 }
             }
+
+        // A patched Steamworks DLL is not enough for Paradox games: the launcher writes every DLC it thinks is
+        // unowned into dlc_load.json, and the game obeys that file. Keep it in sync with the user's selection.
+        if (selection.IsParadoxGame)
+        {
+            UpdateUser(
+                $"{(uninstalling ? "Restoring" : "Updating")} Paradox DLC load order for {selection.Name} . . . ",
+                LogTextBox.Operation);
+            if (uninstalling)
+                _ = await ParadoxGame.RestoreDlcLoad(selection, this);
+            else
+                _ = await ParadoxGame.UpdateDlcLoad(selection, this);
+        }
 
         UpdateProgress(100);
     }
